@@ -5,3 +5,134 @@ date: "11/26/2021"
 output: github_document
 ---
 
+```{r}
+#Load relevant libraries
+
+library(tidyverse)
+library(viridis)
+```
+
+```{r}
+#Setup for visualizations
+knitr::opts_chunk$set(
+  fig.width = 10,
+  fig.asp = .6,
+  out.width = "90%"
+)
+```
+
+## Load Data
+```{r}
+birth<- read_csv("data/birthweight.csv")
+```
+
+## Data Cleaning   
+
+First we will check if there are any NAs in columns 
+```{r}
+# Check for NAs 
+birth%>%
+summarise_all(funs(sum(is.na(.)))) # No NAs in columns 
+```
+From the data description in homework assignment we know that `babysex`, `frace`, `malform`, `mrace` are all categorical variables that are currently coded numerically. We will first change this to categorical variables.  
+
+```{r}
+birth%>%
+  summarise_all(class)
+#All coded numerically 
+
+birth%>%
+  distinct(frace)
+#Only 5 categories - 1, 2, 3, 4, 8 even though description has 9 there are no 9s that exist in this current dataset 
+
+birth%>%
+  distinct(mrace)
+#Only 1, 2, 3, 4 for mrace
+
+birth%>%
+  distinct(malform)
+
+birth_cln<-birth%>%
+  mutate( babysex = replace(babysex, babysex == 1, "Male"),
+          babysex = replace(babysex, babysex == 2, "Female"), 
+          frace = replace(frace, frace ==1, "White"),
+          frace = replace(frace, frace ==2, "Black"),
+          frace = replace(frace, frace ==3, "Asian"),
+          frace = replace(frace, frace ==4, "Puerto Rican"),
+          frace = replace(frace, frace ==8, "Other"),
+          malform = replace(malform, malform ==0, "absent"), 
+          malform = replace(malform, malform ==1, "present"),
+          mrace = replace(mrace, mrace ==1, "White"),
+          mrace = replace(mrace, mrace ==2, "Black"),
+          mrace = replace(mrace, mrace ==3, "Asian"),
+          mrace = replace(mrace, mrace ==4, "Puerto Rican"), 
+          babysex = factor(babysex, levels=c("Male", "Female")), 
+          frace = factor(frace, levels=c("White", "Black", "Asian", "Puerto Rican", "Other")),
+          mrace = factor(mrace, levels=c("White", "Black", "Asian", "Puerto Rican")))
+
+birth_cln%>%
+  head(5)%>%
+  knitr::kable()
+```
+
+Regression model for birthweight
+
+From this [publication](https://pubmed.ncbi.nlm.nih.gov/7570074/), I hypothesize that maternal race, infant sex, maternal smoking status, and education would be important factors for birthweight. Since we do not have education, I will use family monthly income (`fincome`) as a proxy for education. Who defines smoking status as "someone who smokes a tobacco product either daily or occasionally". I will use `smoken` and create a new variable `smoke_status` defined by smoker as greater than 0 cigrattes per day and non-smoker as 0 cigarettes per day.  
+
+
+```{r}
+#Create smoker variable 
+birth_cln%>%
+  distinct(smoken)
+
+birth_cln<-birth_cln%>%
+  mutate(smoke_status = case_when(smoken >0 ~ "smoker",
+                                  smoken ==0 ~"non-smoker"))
+```
+
+
+Model Fitting Process - We will start with `smoke_status` and `babysex` and evaluate based on Adjusted $R^2$ 
+```{r}
+fit = lm(bwt ~ smoke_status + babysex, data = birth_cln)
+summary(fit)
+```
+
+Let's see if adding maternal race helps this model 
+```{r}
+fit_2 = lm(bwt ~ smoke_status + babysex + mrace, data = birth_cln)
+summary(fit_2)
+```
+This slightly increased our Adjusted $R^2$ from 0.01957 to 0.1149. Let's see if adding family monthly income helps (`fincome`). 
+
+```{r}
+fit_3 = lm(bwt ~ smoke_status + babysex + mrace+fincome, data = birth_cln)
+summary(fit_3)
+```
+
+This slightly increased our Adjusted $R^2$ from 0.1149 to 0.1157. Still not the best model, this may suggest a linear model is not the best fit for birthweight. However, we will continue using `fit_3`. 
+
+Compare your model to two others:
+
+One using length at birth and gestational age as predictors (main effects only)
+One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+
+```{r}
+
+```
+
+
+## Problem 2 
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
