@@ -10,6 +10,8 @@ output: github_document
 
 library(tidyverse)
 library(viridis)
+library(modelr)
+library(mgcv)
 ```
 
 ```{r}
@@ -93,33 +95,84 @@ birth_cln<-birth_cln%>%
 
 Model Fitting Process - We will start with `smoke_status` and `babysex` and evaluate based on Adjusted $R^2$ 
 ```{r}
-fit = lm(bwt ~ smoke_status + babysex, data = birth_cln)
+fit = lm(bwt ~ smoke_status + babysex + gaweeks, data = birth_cln)
 summary(fit)
 ```
 
 Let's see if adding maternal race helps this model 
 ```{r}
-fit_2 = lm(bwt ~ smoke_status + babysex + mrace, data = birth_cln)
+fit_2 = lm(bwt ~ smoke_status + babysex + mrace + gaweeks, data = birth_cln)
 summary(fit_2)
 ```
 This slightly increased our Adjusted $R^2$ from 0.01957 to 0.1149. Let's see if adding family monthly income helps (`fincome`). 
 
 ```{r}
-fit_3 = lm(bwt ~ smoke_status + babysex + mrace+fincome, data = birth_cln)
+fit_3 = lm(bwt ~ smoke_status + babysex + mrace+fincome +gaweeks, data = birth_cln)
 summary(fit_3)
 ```
 
 This slightly increased our Adjusted $R^2$ from 0.1149 to 0.1157. Still not the best model, this may suggest a linear model is not the best fit for birthweight. However, we will continue using `fit_3`. 
 
+```{r}
+birth_cln %>% 
+  modelr::add_residuals(fit_3) %>% 
+  modelr::add_predictions(fit_3)%>%
+  ggplot(aes(x = bwt, y = resid)) +geom_point()
+
+birth_cln %>% 
+  modelr::add_residuals(fit_3) %>% 
+  modelr::add_predictions(fit_3)%>%
+  ggplot(aes(x = pred, y = resid)) +geom_point()
+```
+
+
 Compare your model to two others:
 
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
+  * One using length at birth and gestational age as predictors (main effects only) - `model_comp_1`
+  
+  * One using head circumference, length, sex, and all interactions (including the three-way interaction) between these - `model_comp_2`
 
 ```{r}
+model_comp_1 = lm(bwt ~ blength + gaweeks, data = birth_cln)
+summary(model_comp_1)
+
+model_comp_2 = lm(bwt ~ bhead*blength + bhead*blength*babysex + blength*babysex +bhead*babysex , data = birth_cln)
+summary(model_comp_2)
+```
+
+Compare using cross-validation 
+```{r}
+cv_df =
+  crossv_mc(birth_cln, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+cv_df = 
+  cv_df %>% 
+  mutate(
+    model_1  = map(train, ~lm(bwt ~ smoke_status + babysex + mrace+fincome +gaweeks, data = .x)),
+    model_2     = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    model_3  = map(train, ~lm(bwt ~ bhead*blength + bhead*blength*babysex + blength*babysex +bhead*babysex , data = .x))) %>% 
+  mutate(
+    rmse_1 = map2_dbl(model_1, test, ~rmse(model = .x, data = .y)),
+    rmse_2    = map2_dbl(model_2, test, ~rmse(model = .x, data = .y)),
+    rmse_3 = map2_dbl(model_3, test, ~rmse(model = .x, data = .y)))
 
 ```
 
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+Model 3 seems to be the best fit and model 1  seems to be the worst fit. The RMSE of Model 1 is the highest and RMSE of Model 3 is the lowest.  It is possible there are too many variables in model 1 and this is reducing the predictability of the model. This suggests that head circumference, length at birth, and baby sex are important variables for prediction of birthweight.  
 
 ## Problem 2 
 ```{r}
@@ -134,5 +187,61 @@ weather_df =
     tmin = tmin / 10,
     tmax = tmax / 10) %>%
   select(name, id, everything())
+```
+
+```{r}
+weather_fit<-lm(tmax ~ tmin, data = weather_df)
+
+log(weather_fit$coefficients[2]*weather_fit$coefficients[1])
+
+lm(tmax ~ tmin, data = weather_df) %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+
+broom::glance.summary.lm(weather_fit)%>%
+  select(r.squared)
+```
+
+```{r}
+boot_sample = function(df) {
+  sample_frac(df, replace = TRUE)
+}
+
+boot_straps = 
+  data_frame(
+    strap_number = 1:1000,
+    strap_sample = rerun(1000, boot_sample(weather_df))
+  )
+
+boot_straps
+
+bootstrap_results = 
+  boot_straps %>% 
+  mutate(
+    models = map(strap_sample, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy),
+    summary = map(models, broom::glance))%>% 
+  unnest(results)%>%
+  select(term, estimate, summary)%>%
+  unnest(summary)%>%
+  select(term, estimate, r.squared)%>%
+  pivot_wider(names_from = term,
+              values_from = estimate)
+
+bootstrap_results%>%
+  mutate(log_b0_b1 = `(Intercept)` *tmin)%>%
+  pivot_longer(cols = c("r.squared","log_b0_b1"),
+               names_to = "quantity",
+               values_to = "estimate")%>%
+  select(quantity, estimate)%>%
+  group_by(quantity) %>% 
+  summarize(
+    ci_lower = quantile(estimate, 0.025), 
+    ci_upper = quantile(estimate, 0.975))
+  
+  
+  
+  
+
 ```
 
