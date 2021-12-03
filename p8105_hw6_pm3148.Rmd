@@ -31,7 +31,7 @@ birth<- read_csv("data/birthweight.csv")
 ## Data Cleaning   
 
 First we will check if there are any NAs in columns 
-```{r}
+```{r warning=FALSE}
 # Check for NAs 
 birth%>%
 summarise_all(funs(sum(is.na(.)))) # No NAs in columns 
@@ -62,8 +62,7 @@ birth_cln<-birth%>%
           frace = replace(frace, frace ==3, "Asian"),
           frace = replace(frace, frace ==4, "Puerto Rican"),
           frace = replace(frace, frace ==8, "Other"),
-          malform = replace(malform, malform ==0, "absent"), 
-          malform = replace(malform, malform ==1, "present"),
+          malform = as.logical(malform), 
           mrace = replace(mrace, mrace ==1, "White"),
           mrace = replace(mrace, mrace ==2, "Black"),
           mrace = replace(mrace, mrace ==3, "Asian"),
@@ -119,24 +118,27 @@ birth_cln %>%
   modelr::add_predictions(fit_3)%>%
   ggplot(aes(x = bwt, y = resid)) +geom_point()
 
+
 birth_cln %>% 
   modelr::add_residuals(fit_3) %>% 
   modelr::add_predictions(fit_3)%>%
-  ggplot(aes(x = pred, y = resid)) +geom_point()
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point()+ geom_hline(yintercept=0, linetype="dashed", color = "grey")+
+  ylab("Prediction Value") + xlab("Residual Value") + ggtitle("Model Predictions against Residual Values")
 ```
-
+The Residuals vs. Predicted Values plot is used to detect unequal variance (heteroscedasticity) and outliers. We are looking to see that residual values bounce around 0 and no unusual values stand out from the pattern, which is an indication of no outliers. Based on the plot of predictions against residual, the third model created looks like there is a pretty good fit.     
 
 Compare your model to two others:
 
   * One using length at birth and gestational age as predictors (main effects only) - `model_comp_1`
   
-  * One using head circumference, length, sex, and all interactions (including the three-way interaction) between these - `model_comp_2`
+  * One using head circumference, length, sex, and all interactions (including the three-way interaction) between these - `model_comp_2`. 
 
 ```{r}
 model_comp_1 = lm(bwt ~ blength + gaweeks, data = birth_cln)
 summary(model_comp_1)
 
-model_comp_2 = lm(bwt ~ bhead*blength + bhead*blength*babysex + blength*babysex +bhead*babysex , data = birth_cln)
+model_comp_2 = lm(bwt ~ blength + bhead +babysex + bhead*blength*babysex, data = birth_cln)
 summary(model_comp_2)
 ```
 
@@ -170,9 +172,9 @@ cv_df %>%
     values_to = "rmse",
     names_prefix = "rmse_") %>% 
   mutate(model = fct_inorder(model)) %>% 
-  ggplot(aes(x = model, y = rmse)) + geom_violin()
+  ggplot(aes(x = model, y = rmse)) + geom_violin() + xlab("Model") + ylab("RMSE Score")
 ```
-Model 3 seems to be the best fit and model 1  seems to be the worst fit. The RMSE of Model 1 is the highest and RMSE of Model 3 is the lowest.  It is possible there are too many variables in model 1 and this is reducing the predictability of the model. This suggests that head circumference, length at birth, and baby sex are important variables for prediction of birthweight.  
+Model 3 seems to be the best fit and model 1  seems to be the worst fit. The RMSE of Model 1 is the highest and RMSE of Model 3 is the lowest.  It is possible there are too many variables in model 1 and this is reducing the predictability of the model. This suggests that head circumference, length at birth, and baby sex are important variables for prediction of birthweight. Model 2 had the least amount of predictors so it is possible the model is too simple which would explain the lower RMSE. 
 
 ## Problem 2 
 ```{r}
@@ -202,15 +204,15 @@ broom::glance(weather_fit)%>%
   select(r.squared)
 ```
 
-```{r}
+```{r warning = FALSE}
 boot_sample = function(df) {
   sample_frac(df, replace = TRUE)
 }
 
 boot_straps = 
   data_frame(
-    strap_number = 1:1000,
-    strap_sample = rerun(1000, boot_sample(weather_df))
+    strap_number = 1:5000,
+    strap_sample = rerun(5000, boot_sample(weather_df))
   )
 
 boot_straps
@@ -237,11 +239,26 @@ bootstrap_results%>%
   group_by(quantity) %>% 
   summarize(
     ci_lower = quantile(estimate, 0.025), 
-    ci_upper = quantile(estimate, 0.975))
+    ci_upper = quantile(estimate, 0.975))%>%
+  knitr::kable()
   
   
   
   
 
+```
+Let's plot the distribution of the estimates. First look at the distribution for $R^2$. 
+
+```{r}
+#Density plot for R-Squared 
+bootstrap_results%>%
+  mutate(log_b0_b1 = `(Intercept)` *tmin)%>%
+  ggplot(aes(x = r.squared)) + geom_density()+xlab(expression(R^2))+ylab("Density")
+```
+Now let's look at the distribution plot for $log(\hat{\beta}_{0}*\hat{\beta}_{1})$
+```{r}
+bootstrap_results%>%
+  mutate(log_b0_b1 = `(Intercept)` *tmin)%>%
+  ggplot(aes(x = log_b0_b1)) + geom_density() +xlab(expression(log(hat(beta[0])%*%hat(beta[1]))))+ylab("Density")
 ```
 
