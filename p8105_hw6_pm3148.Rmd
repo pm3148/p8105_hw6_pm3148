@@ -79,7 +79,7 @@ birth_cln%>%
 
 Regression model for birthweight
 
-From this [publication](https://pubmed.ncbi.nlm.nih.gov/7570074/), I hypothesize that maternal race, infant sex, maternal smoking status, and education would be important factors for birthweight. Since we do not have education, I will use family monthly income (`fincome`) as a proxy for education. Who defines smoking status as "someone who smokes a tobacco product either daily or occasionally". I will use `smoken` and create a new variable `smoke_status` defined by smoker as greater than 0 cigrattes per day and non-smoker as 0 cigarettes per day.  
+From this [publication](https://pubmed.ncbi.nlm.nih.gov/7570074/), I hypothesize that maternal race, infant sex, maternal smoking status, and education would be important factors for birthweight. Since we do not have education, I will use family monthly income (`fincome`) as a proxy for education. The World Health Organization (WHO) defines smoking status as "someone who smokes a tobacco product either daily or occasionally". I will use `smoken` and create a new variable `smoke_status` defined by smoker as greater than 0 cigarettes per day and non-smoker as 0 cigarettes per day.  
 
 
 ```{r}
@@ -198,7 +198,7 @@ lm(tmax ~ tmin, data = weather_df) %>%
   broom::tidy() %>% 
   knitr::kable(digits = 3)
 
-broom::glance.summary.lm(weather_fit)%>%
+broom::glance(weather_fit)%>%
   select(r.squared)
 ```
 
