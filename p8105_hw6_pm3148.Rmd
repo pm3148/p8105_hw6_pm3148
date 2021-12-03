@@ -76,7 +76,7 @@ birth_cln%>%
   knitr::kable()
 ```
 
-Regression model for birthweight
+## Regression model for birthweight
 
 From this [publication](https://pubmed.ncbi.nlm.nih.gov/7570074/), I hypothesize that maternal race, infant sex, maternal smoking status, and education would be important factors for birthweight. Since we do not have education, I will use family monthly income (`fincome`) as a proxy for education. The World Health Organization (WHO) defines smoking status as "someone who smokes a tobacco product either daily or occasionally". I will use `smoken` and create a new variable `smoke_status` defined by smoker as greater than 0 cigarettes per day and non-smoker as 0 cigarettes per day.  
 
@@ -92,25 +92,48 @@ birth_cln<-birth_cln%>%
 ```
 
 
-Model Fitting Process - We will start with `smoke_status` and `babysex` and evaluate based on Adjusted $R^2$ 
+## Model Fitting Process
+
+We will start with `smoke_status` and `babysex` and evaluate based on Adjusted $R^2$ 
+
 ```{r}
 fit = lm(bwt ~ smoke_status + babysex + gaweeks, data = birth_cln)
-summary(fit)
+summary(fit)$adj.r.squared
+
+fit%>%
+  broom::tidy()%>%
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
 ```
+
+With this model, we start out with a $R^2$ of 0.1912. In our regression table, we can also see that all predictors are statistically significant. 
+
 
 Let's see if adding maternal race helps this model 
 ```{r}
 fit_2 = lm(bwt ~ smoke_status + babysex + mrace + gaweeks, data = birth_cln)
-summary(fit_2)
+summary(fit_2)$adj.r.squared
+
+fit_2%>%
+  broom::tidy()%>%
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
+
 ```
-This slightly increased our Adjusted $R^2$ from 0.01957 to 0.1149. Let's see if adding family monthly income helps (`fincome`). 
+
+This slightly increased our Adjusted $R^2$ from 0.1912 to 0.2467. Again, all our predictors are statistically significant. Let's see if adding family monthly income helps (`fincome`). 
 
 ```{r}
 fit_3 = lm(bwt ~ smoke_status + babysex + mrace+fincome +gaweeks, data = birth_cln)
-summary(fit_3)
+summary(fit_3)$adj.r.squared
+
+fit_3%>%  
+  broom::tidy()%>%
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
 ```
 
-This slightly increased our Adjusted $R^2$ from 0.1149 to 0.1157. Still not the best model, this may suggest a linear model is not the best fit for birthweight. However, we will continue using `fit_3`. 
+This slightly increased our Adjusted $R^2$ from 0.2467 to 0.2468. Still not the best model, this may suggest a linear model is not the best fit for birthweight. In this model, we can also see that `fincome` is not statistically significant. However, for the purpose of this assignment, we will continue using `fit_3`. 
 
 ```{r}
 birth_cln %>% 
@@ -126,9 +149,11 @@ birth_cln %>%
   geom_point()+ geom_hline(yintercept=0, linetype="dashed", color = "grey")+
   ylab("Prediction Value") + xlab("Residual Value") + ggtitle("Model Predictions against Residual Values")
 ```
+
 The Residuals vs. Predicted Values plot is used to detect unequal variance (heteroscedasticity) and outliers. We are looking to see that residual values bounce around 0 and no unusual values stand out from the pattern, which is an indication of no outliers. Based on the plot of predictions against residual, the third model created looks like there is a pretty good fit.     
 
-Compare your model to two others:
+
+## Compare your model to two others:
 
   * One using length at birth and gestational age as predictors (main effects only) - `model_comp_1`
   
@@ -136,13 +161,22 @@ Compare your model to two others:
 
 ```{r}
 model_comp_1 = lm(bwt ~ blength + gaweeks, data = birth_cln)
-summary(model_comp_1)
+summary(model_comp_1)$adj.r.squared
+model_comp_1%>%
+  broom::tidy() %>% 
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
 
 model_comp_2 = lm(bwt ~ blength + bhead +babysex + bhead*blength*babysex, data = birth_cln)
-summary(model_comp_2)
+summary(model_comp_2)$adj.r.squared
+
+model_comp_2%>%
+  broom::tidy() %>% 
+  select(term, estimate, p.value) %>% 
+  knitr::kable(digits = 3)
 ```
 
-Compare using cross-validation 
+## Compare using cross-validation 
 ```{r}
 cv_df =
   crossv_mc(birth_cln, 100) %>% 
@@ -155,7 +189,7 @@ cv_df =
   mutate(
     model_1  = map(train, ~lm(bwt ~ smoke_status + babysex + mrace+fincome +gaweeks, data = .x)),
     model_2     = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
-    model_3  = map(train, ~lm(bwt ~ bhead*blength + bhead*blength*babysex + blength*babysex +bhead*babysex , data = .x))) %>% 
+    model_3  = map(train, ~lm(bwt ~ blength + bhead +babysex + bhead*blength*babysex, data = .x))) %>% 
   mutate(
     rmse_1 = map2_dbl(model_1, test, ~rmse(model = .x, data = .y)),
     rmse_2    = map2_dbl(model_2, test, ~rmse(model = .x, data = .y)),
@@ -174,7 +208,7 @@ cv_df %>%
   mutate(model = fct_inorder(model)) %>% 
   ggplot(aes(x = model, y = rmse)) + geom_violin() + xlab("Model") + ylab("RMSE Score")
 ```
-Model 3 seems to be the best fit and model 1  seems to be the worst fit. The RMSE of Model 1 is the highest and RMSE of Model 3 is the lowest.  It is possible there are too many variables in model 1 and this is reducing the predictability of the model. This suggests that head circumference, length at birth, and baby sex are important variables for prediction of birthweight. Model 2 had the least amount of predictors so it is possible the model is too simple which would explain the lower RMSE. 
+Model 3 seems to be the best fit and model 1, the model I created, seems to be the worst fit. The RMSE of Model 1 is the highest and RMSE of Model 3 is the lowest.  It is possible there are too many variables in model 1 and this is reducing the predictability of the model. Also the variables chosen in my model, are likely not as important as the variables in the other two models. This suggests that head circumference, length at birth, and baby sex are important variables for prediction of birthweight and income, maternal race, and smoking status are not as important. Model 2 had the least amount of predictors so it is possible the model is too simple which would explain the lower RMSE. 
 
 ## Problem 2 
 ```{r}
@@ -203,6 +237,7 @@ lm(tmax ~ tmin, data = weather_df) %>%
 broom::glance(weather_fit)%>%
   select(r.squared)
 ```
+## 5000 Sample Bootstrap for estimates 
 
 ```{r warning = FALSE}
 boot_sample = function(df) {
@@ -247,6 +282,7 @@ bootstrap_results%>%
   
 
 ```
+
 Let's plot the distribution of the estimates. First look at the distribution for $R^2$. 
 
 ```{r}
@@ -255,6 +291,7 @@ bootstrap_results%>%
   mutate(log_b0_b1 = `(Intercept)` *tmin)%>%
   ggplot(aes(x = r.squared)) + geom_density()+xlab(expression(R^2))+ylab("Density")
 ```
+
 Now let's look at the distribution plot for $log(\hat{\beta}_{0}*\hat{\beta}_{1})$
 ```{r}
 bootstrap_results%>%
