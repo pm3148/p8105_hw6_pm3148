@@ -291,6 +291,7 @@ bootstrap_results%>%
   mutate(log_b0_b1 = `(Intercept)` *tmin)%>%
   ggplot(aes(x = r.squared)) + geom_density()+xlab(expression(R^2))+ylab("Density")
 ```
+Distributions for $R^2$ is fairly uniform. This makes sense because it is a sample of n = 5000 so we would expect a normal distribution. 
 
 Now let's look at the distribution plot for $log(\hat{\beta}_{0}*\hat{\beta}_{1})$
 ```{r}
@@ -299,3 +300,5 @@ bootstrap_results%>%
   ggplot(aes(x = log_b0_b1)) + geom_density() +xlab(expression(log(hat(beta[0])%*%hat(beta[1]))))+ylab("Density")
 ```
 
+The distribution for $log(\hat{\beta}_{0}*\hat{\beta}_{1})$ is also fairly normal.This makes sense because it is a sample of n = 5000 so we would expect a normal distribution. 
+ 
